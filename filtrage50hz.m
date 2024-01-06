@@ -1,3 +1,7 @@
+% Code écrit par Solal BITTOUN, Lilian DELORY et Maxime LELONG - MASTER SAR
+% Dans le cadre du TP/DM du cours d'Estimation et Identification.
+% Code permettant d'étudier le comportement du filtre à 50 Hz.
+
 %close all 
 clear variables; clc; close;
 
@@ -12,7 +16,7 @@ TR.S = [0 0 0 0; 0 0 0 0];
 % TR.S = [0 0 0 0; 0 1 0 2]; 
     
 % Run script
-option = 'only_acquisition_hardware' ; % 'full_robot' or  'only_acquisition_hardware'
+option = 'full_robot' ; % 'full_robot' or  'only_acquisition_hardware'
 [q, tau] = myrobot(TR,option);
 
 %% Plot results

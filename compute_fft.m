@@ -1,3 +1,7 @@
+% Code écrit par Solal BITTOUN, Lilian DELORY et Maxime LELONG - MASTER SAR
+% Dans le cadre du TP/DM du cours d'Estimation et Identification.
+% Fonction permettant de calculer la fft d'un signal.
+
 function [f, fft_dB] = compute_fft(X, Fe)
     
     N = length(X);

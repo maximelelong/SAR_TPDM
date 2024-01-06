@@ -1,3 +1,8 @@
+
+% Code écrit par Solal BITTOUN, Lilian DELORY et Maxime LELONG - MASTER SAR
+% Dans le cadre du TP/DM du cours d'Estimation et Identification.
+% Code qui permet d'étudier le décalage entre les deux interfaces.
+
 %% Generate measures
 clear 
 clc;

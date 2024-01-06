@@ -1,27 +1,25 @@
 
 % Code écrit par Solal BITTOUN, Lilian DELORY et Maxime LELONG - MASTER SAR
 % Dans le cadre du TP/DM du cours d'Estimation et Identification.
-% Code "main" permettant de réaliser l'identification paramétrique en utilisant un estimateur MLE ou LS
+% Code "main_descente_gradien" permettant de réaliser l'identification
+% paramétrique en utilisant l'algo de descente de gradient.
 
 %% Cleanup
 clear variables; clc; close all;
 
 %% Full robot 
 
-% Modèle simplifié avec theta1 = m2. (1 sinon non = 0)
-simplifie = 0;
-
 TR.T = 10;     %Durée de la période
 TR.N = 2;      % Nombre de période
 TR.Q = [0; 0]; % Position de départ.
 
 % Trajectoire 1
-TR.C = [1.2 0 1 0.4 0.3; 0 0 1 0 0];
-TR.S = [1.1 0 0.2 pi 0.3; 1.2 0.3 0.7 0.4 0.3];
+%TR.C = [1.2 0 1 0.4 0.3; 0 0 1 0 0];
+%TR.S = [1.1 0 0.2 pi 0.3; 1.2 0.3 0.7 0.4 0.3];
 
 % Trajectoire 2
-%TR.C = [pi 0 0 0 0; 0 0 0 1 0];
-%TR.S = [0 0 1 0 0; pi 0 0 0 0];
+TR.C = [pi 0 0 0 0; 0 0 0 1 0];
+TR.S = [0 0 1 0 0; pi 0 0 0 0];
 
 % Run script
 option = 'full_robot'; % 'full_robot' or  'only_acquisition_hardware'
@@ -105,7 +103,7 @@ plot(frequencies, abs(Y2));
 xlabel("Fréquences (en Hz)")
 ylabel("Amplitude (en dB)")
 legend("Axe 1", "Axe 2")
-title("FFT des signaux de postions");
+title("FFT des signaux de postions")
 
 %% Derivation numérique
 
@@ -194,7 +192,7 @@ legend('Accélération 1', 'Accélération 2');
 xlabel('Temps (s)');
 ylabel('Accélération');
 grid on;
-sgtitle("Comparaison signaux filtrés et non filtrés")
+sgtitle("Comparaison signaux filtrés et non filtrés de positions, vitesses et accélérations")
 
 %% Tracage des signaux de couples.
 figure()
@@ -217,7 +215,7 @@ ylabel('Couple (en Nm)')
 title("Comparaison des couples mesurés et mesurés et filtrés de l'axe 2")
 grid on;
 
-sgtitle("Comparaison signaux de couples filtrés et non filtrés");
+sgtitle("Comparaison signaux de couples filtrés et non filtrés")
 
 
 
@@ -276,7 +274,6 @@ ylabel('Accélération');
 legend('Axe 1', 'Axe 2')
 
 sgtitle("Signaux de vitesses et d'accélérations issus de l'expression de la trajectoire");
-
 %% Comparaison des signaux de vitesses et d'acceleration
 figure()
 
@@ -300,25 +297,133 @@ legend("Littérale 1","Littérale 2","Derivation numérique 1","Dérivation num�
 
 sgtitle("Comparison des signaux de vitesses et d'accélération");
 
-%% Regression Linéaire 
+%% Identification Avec Descente de gradient
 
-% Matrice qui va contenir les sous matrices du modèle pour chaque
-% échantillon.
-phi_tot = [];
+nb_mesures = length(acceleration);
 
-% Matrice qui va contenir les sous matrices de couples pour chaque
-% échantillon.
-couple = [];
+% On forme le vecteur best_guess
+best_g = [2 1 0.2 0.2 0.04 0.02 0.0001 0.0001 0.01 0.01];
 
-% Matrice de covariance du bruit de mesure.
-R = [];
+pk_evolution = [];
 
 
-% Si on souhaite utiliser les vitesses et accélérations de la dérivation
-% numérique : décommenter.
-% signals.tau_aligned = signals.tau_aligned(3:end,:);
-% position = position(3:end,:);
-% vitesse = vitesse(2:end,:);
+% Boolean alpha qui permet d'indiquer si on additionne entièrement delta_pk
+% à pk. 
+alpha = 0;
+
+% On itère 150 fois.
+for i=1:150
+    erreur = [];
+    J_G = [];
+    % Si i=1, on prend pk = best guess
+    if i==1
+        pk = best_g;
+    end
+
+    for j=100:nb_mesures-100
+        %On recupère les vitesses, accélerations.
+        %On appelle fonction  modèle dynamique
+        q1 = position_filtree(j,1);
+        q2 = position_filtree(j,2);
+
+        dq1 = vi(j,1);
+        dq2 = vi(j,2);
+
+        ddq1 = ai(j,1);
+        ddq2 = ai(j,2);
+
+        % Appel de la fonction permettant d'obtenir les couples estimés
+        % de notre modèle avec les paramètres pk.
+        [estim_torque,J] = jacobian(q1,q2,dq1,dq2,ddq1,ddq2,pk);
+
+        tau_i1 = tau_filtree(j,1);
+        tau_i2 = tau_filtree(j,2);
+
+        tau_temp = [tau_i1; tau_i2];
+
+        %disp("True Torque");
+        %disp(tau_temp);
+
+        % On calcul l'erreur en faisant : Y - F(X,pk)
+        erreur_temp = (tau_temp - estim_torque);
+
+        %disp("Erreur");
+        %disp(erreur_temp);
+
+        erreur = [erreur ; erreur_temp];
+
+        % On concatène les valeurs de Jacobienne.
+        J_G = [J_G ; J];   
+    end
+
+    if i>1
+        if norm(erreur) > norm(memorisation_erreur)
+            %L'erreur a augmenté 
+            alpha = 1;
+            %disp(norm(erreur));
+        end
+    end
+    fprintf("Erreur : " + norm(erreur) + "\n");
+
+    J_G_reduit = J_G;
+    J_G_reduit(:, [1, 3, 5]) = [];
+    % 
+    % % Idem pour le vecteur pk (on enlève la 1ère et 4e colonne).
+    pk_reduit = pk;
+    pk_reduit(:, [1, 3, 5]) = [];
+
+    % On calcule delta pk ainsi que le nouveau vecteur de paramètres.
+    delta_pk = (J_G_reduit'*J_G_reduit)^(-1)*J_G_reduit'*erreur;
+
+    if alpha == 0
+        pk_reduit = pk_reduit + 1*delta_pk';
+    else 
+        disp("Erreur a augmenté à l'itération i : " + i)
+        pk_reduit = pk_reduit + 0.250*delta_pk';
+    end
+
+    % On reforme le vecteur des paramètres avec les paramètres déja connues
+    pk = [best_g(1) pk_reduit(1:end)];
+    pk = [pk(1:2) best_g(3) pk(3:end)];
+    pk = [pk(1:4) best_g(5) pk(5:end)];
+      
+    memorisation_erreur = erreur;
+    alpha = 0;
+    disp(i);
+    disp(pk);
+    pk_evolution = [pk_evolution ; pk];
+end
+
+disp (pk);
+
+
+%% Test computed torque
+
+% Choix entre estimation courante et estimation présenté dans le rapport
+
+param_id = [ 2.0000 ;   0.6755  ;  0.2000  ;  0.4493  ;  0.0400
+   -0.1753  ;  0.1262  ; -0.0796 ;  -0.3277  ;  0.2035];
+
+%param_id = pk;
+
+m1 = param_id(1);
+m2 = param_id(2);
+
+l1 = param_id(3);
+l2 = param_id(4);
+
+I1 = param_id(5);
+I2 = param_id(6);
+
+fv1 = param_id(7);
+fv2 = param_id(8);
+
+fc1 = param_id(9);
+fc2 = param_id(10);
+
+param_ide = [(m1*(l1^2) + I1 + m2*(0.5^2)) ; m2*(l2^2); l2*m2; m2*(l2^2)+I2;fv1;fv2;fc1;fc2];
+
+compute_torque = [];
 
 
 for i = 100:length(acceleration)-100
@@ -326,98 +431,6 @@ for i = 100:length(acceleration)-100
     % On appelle fonction  modèle dynamique
     q1 = position_filtree(i,1);
     q2 = position_filtree(i,2);
-
-    % Si on souhaite utiliser les vitesses et accélérations de la dérivation
-    % numérique : décommenter.
-    % dq1 = vitesse_filtree(i,1);
-    % dq2 = vitesse_filtree(i,2);
-    % 
-    % ddq1 = acceleration_filtree(i,1);
-    % ddq2 = acceleration_filtree(i,2);
-
-    dq1 = vi(i,1);
-    dq2 = vi(i,2);
-
-    ddq1 = ai(i,1);
-    ddq2 = ai(i,2);
-
-    % Appel à la fonction mod_dyn qui permet de calculer la matrice phi du
-    % modèle linéaire.
-    phi = mod_dyn(q1,q2,dq1,dq2,ddq1,ddq2);
-    
-    % On ajoute phi.
-    phi_tot = [phi_tot; phi];
-    
-    tau_i1 = tau_filtree(i,1);
-    tau_i2 = tau_filtree(i,2);
-
-    if (simplifie == 1)
-         tau_i1 = tau_filtree(i,1) - (2*(0.2^2) + 0.04)*ddq1;
-    end
-    
-    % On ajoute les deux nouvelles valeurs de couples.
-    couple = [couple; tau_i1];
-    couple = [couple; tau_i2];
-
-    % Permet d'afficher l'évolution de la boucle dans la commande.
-    disp(i);
-end
-
-
-
-%% Identification
-
-% On forme la matrice de covariance du bruit.
-% Si MLE -> 0.36 sinon 1
-variance = 1;
-
-R = eye(2*(length(acceleration)-199)).*variance; 
-phi = phi_tot;
-
-% On fait le calcul d'identification :  X = inv(phi'*inv(R)*phi)*phi'*inv(R)*couple;
-
-x = R\phi;
-x= (phi')*x;
-
-fprintf("Optimalité de la trajectoire : ")
-disp(log(det(x)));
-fprintf("Cond de Phi : ")
-disp(cond(phi))
-
-x= x\(phi');
-x = x/(R);
-
-disp("Paramètres estimés") % x contient l'estimation des paramètres.
-x = x*couple
-
-
-
-%% Computed Torque issus du modèle identifié 
-
-% Paramètres utilisés dans le rapport. 
-% Utilisation de l'estimation courante
-%       -> param_ide = x
-
-param_ide =   [
-    0.1341 ;
-    0.1072 ;
-    0.3237 ;
-   -0.0150 ;
-    0.1216 ;
-   -0.0197 ;
-   -0.3223 ;
-    0.0457 ;
-    ];
-
-compute_torque = [];
-for i = 100:length(acceleration)-100
-
-    % On appelle fonction modèle dynamique
-    q1 = position_filtree(i,1);
-    q2 = position_filtree(i,2);
-
-    % Choix d'utiliser les vitesses et accélerations issues de la
-    % dérivation numérique ou expression littérale.
 
     % dq1 = vitesse_filtree(i,1);
     % dq2 = vitesse_filtree(i,2);
@@ -433,14 +446,10 @@ for i = 100:length(acceleration)-100
 
     couple_cal = computed_torque(q1,q2,dq1,dq2,ddq1,ddq2,param_ide);
 
-    if simplifie == 1 
-        couple_cal(1) = couple_cal(1) + (2*(0.2^2) + 0.04)*ddq1;
-    end
-   
+
     compute_torque = [compute_torque; couple_cal'];
 
 end
-
 
 %% Computed Torque issus du modèle avec les données du sujet.
 
@@ -476,10 +485,6 @@ for i = 100:length(acceleration)-100
     ddq2 = ai(i,2);
 
     couple_cal = computed_torque(q1,q2,dq1,dq2,ddq1,ddq2,param_approx);
-
-    if simplifie == 1 
-        couple_cal(1) = couple_cal(1) + (2*(0.2^2) + 0.04)*ddq1;
-    end
     compute_torque_approx = [compute_torque_approx; couple_cal'];
 
 end
@@ -520,4 +525,70 @@ xlabel('Echantillon');
 ylabel("Couple (en Nm)");
 
 grid on;
+
+
+%%  Tracer l'évolution des paramètres .
+
+% Colonnes à afficher dans le subplot
+selected_columns = [2, 4, 6, 7, 8, 9, 10];
+
+% Nombre total de colonnes à afficher
+num_columns = length(selected_columns);
+
+% Nombre de lignes et de colonnes pour le subplot
+num_rows = ceil(num_columns / 2);
+num_cols = 2;
+
+% Créer une nouvelle figure
+figure;
+
+% Parcourir les colonnes sélectionnées
+for i = 1:num_columns
+    % Sélectionner la colonne actuelle
+    current_column = selected_columns(i);
+    
+    % Créer un subplot
+    subplot(num_rows, num_cols, i);
+    
+    % Tracer les données de la colonne actuelle
+    plot(pk_evolution(:, current_column));
+    xlabel('Itération')
+    
+    % Titre du subplot (facultatif)
+    if(current_column == 2)
+        title('m_2');
+        ylabel('Masse (en kg)');
+    end
+    if(current_column == 4)
+        title('l_2');
+        ylabel('Longueur (en m)');
+    end
+    if(current_column == 6)
+        title('I_2');
+        ylabel('Moment d''inertie (en kg.m²)');
+    end
+    if(current_column == 7)
+        title('fv_1');
+        ylabel('Coefficient (en Nm.s)');
+    end
+     if(current_column == 8)
+        title('fv_2');
+        ylabel('Coefficient (en Nm.s)');
+     end
+         if(current_column == 9)
+        title('fc_1');
+        ylabel('Coefficient (en Nm)');
+    end
+     if(current_column == 10)
+        title('fc_2');
+        ylabel('Coefficient (en Nm)');
+    end
+
+
+
+end
+
+% Ajuster la disposition
+sgtitle('Evolutions des paramètres');
+
 
