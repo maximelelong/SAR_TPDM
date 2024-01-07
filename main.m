@@ -13,7 +13,7 @@ simplifie = 0;
 
 TR.T = 10;     %Durée de la période
 TR.N = 2;      % Nombre de période
-TR.Q = [0; 0]; % Position de départ.
+TR.Q = [0 ; 0]; % Position de départ.
 
 % Trajectoire 1
 TR.C = [1.2 0 1 0.4 0.3; 0 0 1 0 0];
@@ -22,6 +22,18 @@ TR.S = [1.1 0 0.2 pi 0.3; 1.2 0.3 0.7 0.4 0.3];
 % Trajectoire 2
 %TR.C = [pi 0 0 0 0; 0 0 0 1 0];
 %TR.S = [0 0 1 0 0; pi 0 0 0 0];
+
+
+
+% % Trajectoire obtenue avec fmincon.
+  %TR.C= [3.2904  , 0.7161  , 0.2157  , 1.0262  , 0.0879 ; -1.0219  , 0.2683 ,  0.3577 ,   0.4425 ,  1.1029];
+% 
+ %TR.S = [ 0.7021, 0.5119, -0.3817 ,  -0.9182 , -0.6793;  1.6586 ,  1.2675 , 0.4810  , 0.3084  , 0.0739];
+% 
+ %TR.Q = [-0.5287; 0.7020];
+
+
+ 
 
 % Run script
 option = 'full_robot'; % 'full_robot' or  'only_acquisition_hardware'
@@ -380,7 +392,7 @@ x = R\phi;
 x= (phi')*x;
 
 fprintf("Optimalité de la trajectoire : ")
-disp(log(det(x)));
+disp(-log(det(inv(x))));
 fprintf("Cond de Phi : ")
 disp(cond(phi))
 
@@ -408,6 +420,17 @@ param_ide =   [
    -0.3223 ;
     0.0457 ;
     ];
+
+% Param avec fmincon.
+param_ide = [
+    0.0637;
+    0.0028;
+    0.2217;
+   -0.0128;
+    0.0861;
+   -0.0028;
+   -0.4176;
+   -0.0203];
 
 compute_torque = [];
 for i = 100:length(acceleration)-100
